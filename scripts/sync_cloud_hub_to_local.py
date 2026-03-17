@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import hashlib
 import json
 import subprocess
 from datetime import datetime
@@ -22,6 +23,9 @@ BILIBILI_MINDER_ROOT = BILIBILI_ROOT / "minder"
 BILIBILI_LEARNINGS_DIR = BILIBILI_MINDER_ROOT / "cloud_learnings"
 BILIBILI_DAILY_LEARNINGS_DIR = BILIBILI_MINDER_ROOT / "daily_learning_updates"
 BILIBILI_MEMORY_LEDGER = BILIBILI_MINDER_ROOT / "learning_memory.jsonl"
+BILIBILI_THREAD_SYNC_DIR = BILIBILI_MINDER_ROOT / "thread_sync"
+BILIBILI_THREAD_CONTEXT = BILIBILI_THREAD_SYNC_DIR / "cat_meme_learning_context.md"
+BILIBILI_METHOD_CARDS = BILIBILI_THREAD_SYNC_DIR / "cat_meme_method_cards.md"
 STATE_FILE = PROJECT_ROOT / "data" / "cloud_sync_state.json"
 RUN_LOG = PROJECT_ROOT / "data" / "cloud_sync_runs.jsonl"
 IDEA_MEMORY_LEDGER = PROJECT_ROOT / "data" / "cloud_idea_memory.jsonl"
@@ -54,6 +58,13 @@ def append_jsonl(path: Path, payload: dict[str, Any]) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     with path.open("a", encoding="utf-8") as handle:
         handle.write(json.dumps(payload, ensure_ascii=False) + "\n")
+
+
+def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("w", encoding="utf-8") as handle:
+        for row in rows:
+            handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
 def git_cmd(*args: str) -> list[str]:
@@ -123,8 +134,31 @@ def maybe_pull_repo() -> dict[str, Any]:
     }
 
 
-def state() -> dict[str, list[str]]:
-    return read_json(STATE_FILE, {"ideas": [], "learnings": []})
+def file_fingerprint(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
+def normalize_state_bucket(value: Any) -> dict[str, str]:
+    if isinstance(value, dict):
+        return {str(key): str(item) for key, item in value.items()}
+    if isinstance(value, list):
+        return {str(item): "" for item in value}
+    return {}
+
+
+def state() -> dict[str, dict[str, str]]:
+    raw = read_json(STATE_FILE, {"ideas": {}, "learnings": {}})
+    return {
+        "ideas": normalize_state_bucket(raw.get("ideas", {})),
+        "learnings": normalize_state_bucket(raw.get("learnings", {})),
+    }
+
+
+def first_nonempty(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, str) and value.strip():
+            return value.strip()
+    return ""
 
 
 def render_idea_markdown(payload: dict[str, Any]) -> str:
@@ -294,18 +328,183 @@ def build_learning_memory_entry(source_file: str, payload: dict[str, Any]) -> di
     }
 
 
-def sync_idea_into_minder(payload: dict[str, Any]) -> str:
-    day = submitted_date(payload)
-    log_path = MINDER_DAILY_IDEAS_DIR / f"{day}.md"
-    append_markdown_block(log_path, f"{day} Ideas", render_idea_daily_block(payload))
-    return str(log_path)
+def payload_sort_key(item: tuple[str, dict[str, Any]]) -> tuple[str, str]:
+    stem, payload = item
+    return (payload.get("submitted_at", ""), stem)
 
 
-def sync_learning_into_minder(payload: dict[str, Any]) -> str:
-    day = submitted_date(payload)
-    log_path = MINDER_DAILY_LEARNINGS_DIR / f"{day}.md"
-    append_markdown_block(log_path, f"{day} Learning Updates", render_learning_daily_block(payload))
-    return str(log_path)
+def load_payload_entries(source_dir: Path) -> list[tuple[str, dict[str, Any]]]:
+    entries: list[tuple[str, dict[str, Any]]] = []
+    for path in sorted(source_dir.glob("*.json")):
+        entries.append((path.stem, read_json(path, {})))
+    return sorted(entries, key=payload_sort_key)
+
+
+def rewrite_daily_logs(
+    directory: Path,
+    *,
+    title_suffix: str,
+    entries: list[tuple[str, dict[str, Any]]],
+    renderer,
+) -> list[str]:
+    directory.mkdir(parents=True, exist_ok=True)
+    grouped: dict[str, list[str]] = {}
+    for _stem, payload in entries:
+        grouped.setdefault(submitted_date(payload), []).append(renderer(payload))
+
+    written: list[str] = []
+    active_names: set[str] = set()
+    for day, blocks in sorted(grouped.items()):
+        path = directory / f"{day}.md"
+        body = "\n\n".join(block for block in blocks if block.strip()).strip()
+        path.write_text(f"# {day} {title_suffix}\n\n{body}\n", encoding="utf-8")
+        written.append(str(path))
+        active_names.add(path.name)
+
+    for path in directory.glob("*.md"):
+        if path.name not in active_names:
+            path.unlink()
+    return written
+
+
+def bullet_lines(items: list[str], fallback: str = "- (待补充)") -> list[str]:
+    if items:
+        return [f"- {item}" for item in items]
+    return [fallback]
+
+
+def render_bilibili_thread_context(entries: list[tuple[str, dict[str, Any]]]) -> str:
+    lines = [
+        "# Cat Meme Learning Context",
+        "",
+        "这个文件由 `solo-template-business` 的云端学习中枢自动重建。",
+        "开新线程做猫 meme 之前，先读这里，再去看最新的每日学习日志。",
+        "",
+        "## 使用方式",
+        "- 先看最新 3 条学习记录，决定今天最值得复用的钩子或节奏。",
+        "- 再把 `本地落地动作` 直接转成脚本、镜头节奏或素材挑选规则。",
+        "- 如果要同步进长期记忆，优先摘 `一句话记忆` 和 `复用提示`。",
+        "",
+        "## 最新学习输入",
+        "",
+    ]
+
+    for _stem, payload in reversed(entries[-8:]):
+        analysis = payload.get("analysis") or {}
+        extraction = payload.get("extraction") or {}
+        title = payload.get("title", "Learning")
+        summary = first_nonempty(
+            analysis.get("source_summary"),
+            extraction.get("title"),
+            payload.get("source_title"),
+            payload.get("source_url"),
+        )
+        lines.extend(
+            [
+                f"### {title}",
+                "",
+                f"- Source URL: {payload.get('source_url', '')}",
+                f"- Analysis status: {payload.get('analysis_status', '')}",
+                f"- 一句话概括: {summary}",
+                "",
+                "#### 可直接套用的方法",
+                *bullet_lines(analysis.get("reusable_patterns") or []),
+                "",
+                "#### 钩子观察",
+                *bullet_lines(analysis.get("hook_observations") or []),
+                "",
+                "#### 本地落地动作",
+                *bullet_lines(analysis.get("local_adaptation_ideas") or []),
+                "",
+                "#### 一句话记忆",
+                analysis.get("memory_summary", "") or "这条内容值得继续观察，但当前还缺更深入的自动分析。",
+                "",
+                "#### 复用提示",
+                analysis.get("reuse_hint", "") or "先把这条内容拆成开场、反应、转折三个节奏点，再匹配猫素材。",
+                "",
+            ]
+        )
+    return "\n".join(lines).strip() + "\n"
+
+
+def render_bilibili_method_cards(entries: list[tuple[str, dict[str, Any]]]) -> str:
+    lines = [
+        "# Cat Meme Method Cards",
+        "",
+        "这份文件给猫 meme 制作线程直接拿来用，按条查看即可。",
+        "",
+    ]
+    for _stem, payload in entries:
+        analysis = payload.get("analysis") or {}
+        extraction = payload.get("extraction") or {}
+        lines.extend(
+            [
+                f"## {payload.get('title', 'Learning')}",
+                "",
+                f"- Source URL: {payload.get('source_url', '')}",
+                f"- Source Summary: {first_nonempty(analysis.get('source_summary'), extraction.get('title'), payload.get('source_title'))}",
+                f"- Analysis status: {payload.get('analysis_status', '')}",
+                "",
+                "### 可复用结构",
+                *bullet_lines(analysis.get("reusable_patterns") or []),
+                "",
+                "### 钩子与情绪",
+                *bullet_lines(analysis.get("hook_observations") or []),
+                "",
+                "### 猫 meme 落地动作",
+                *bullet_lines(analysis.get("local_adaptation_ideas") or []),
+                "",
+                "### 记忆摘要",
+                analysis.get("memory_summary", "") or "暂时只有原始提取结果，后面还可以继续补强。",
+                "",
+                "### 复用提示",
+                analysis.get("reuse_hint", "") or "先把这条学习改写成猫 meme 的对白和反应节奏。",
+                "",
+            ]
+        )
+    return "\n".join(lines).strip() + "\n"
+
+
+def rewrite_local_ledgers(
+    idea_entries: list[tuple[str, dict[str, Any]]],
+    learning_entries: list[tuple[str, dict[str, Any]]],
+) -> None:
+    write_jsonl(
+        IDEA_MEMORY_LEDGER,
+        [build_idea_memory_entry(f"{stem}.json", payload) for stem, payload in idea_entries],
+    )
+    write_jsonl(
+        LEARNING_MEMORY_LEDGER,
+        [build_learning_memory_entry(f"{stem}.json", payload) for stem, payload in learning_entries],
+    )
+
+
+def rewrite_bilibili_views(learning_entries: list[tuple[str, dict[str, Any]]]) -> dict[str, Any]:
+    if not BILIBILI_ROOT.exists():
+        return {"status": "skipped", "reason": "bilibili_root_missing"}
+
+    BILIBILI_DAILY_LEARNINGS_DIR.mkdir(parents=True, exist_ok=True)
+    BILIBILI_THREAD_SYNC_DIR.mkdir(parents=True, exist_ok=True)
+
+    write_jsonl(
+        BILIBILI_MEMORY_LEDGER,
+        [build_learning_memory_entry(f"{stem}.json", payload) for stem, payload in learning_entries],
+    )
+    daily_logs = rewrite_daily_logs(
+        BILIBILI_DAILY_LEARNINGS_DIR,
+        title_suffix="Learning Updates",
+        entries=learning_entries,
+        renderer=render_learning_daily_block,
+    )
+    BILIBILI_THREAD_CONTEXT.write_text(render_bilibili_thread_context(learning_entries), encoding="utf-8")
+    BILIBILI_METHOD_CARDS.write_text(render_bilibili_method_cards(learning_entries), encoding="utf-8")
+    return {
+        "status": "synced",
+        "daily_logs": daily_logs,
+        "thread_context": str(BILIBILI_THREAD_CONTEXT),
+        "method_cards": str(BILIBILI_METHOD_CARDS),
+        "memory_ledger": str(BILIBILI_MEMORY_LEDGER),
+    }
 
 
 def sync_learning_into_bilibili(stem: str, payload: dict[str, Any]) -> dict[str, Any]:
@@ -315,15 +514,9 @@ def sync_learning_into_bilibili(stem: str, payload: dict[str, Any]) -> dict[str,
     BILIBILI_LEARNINGS_DIR.mkdir(parents=True, exist_ok=True)
     target = BILIBILI_LEARNINGS_DIR / f"{stem}.md"
     target.write_text(render_learning_markdown(payload), encoding="utf-8")
-
-    day = submitted_date(payload)
-    daily_log_path = BILIBILI_DAILY_LEARNINGS_DIR / f"{day}.md"
-    append_markdown_block(daily_log_path, f"{day} Learning Updates", render_learning_daily_block(payload))
-    append_memory_entry(BILIBILI_MEMORY_LEDGER, build_learning_memory_entry(f"{stem}.json", payload))
     return {
         "status": "synced",
         "learning_note": str(target),
-        "daily_log": str(daily_log_path),
     }
 
 
@@ -331,42 +524,42 @@ def sync_bucket(
     *,
     source_dir: Path,
     destination_dir: Path,
-    known_items: list[str],
+    known_items: dict[str, str],
     render,
-    memory_path: Path,
-    memory_builder,
     after_import=None,
-) -> tuple[list[str], list[str]]:
+) -> tuple[dict[str, str], list[str]]:
     destination_dir.mkdir(parents=True, exist_ok=True)
-    imported: list[str] = []
-    seen = set(known_items)
+    changed: list[str] = []
+    current_names: set[str] = set()
     for path in sorted(source_dir.glob("*.json")):
-        if path.name in seen:
+        current_names.add(path.name)
+        fingerprint = file_fingerprint(path)
+        target = destination_dir / f"{path.stem}.md"
+        if known_items.get(path.name) == fingerprint and target.exists():
             continue
         payload = read_json(path, {})
-        target = destination_dir / f"{path.stem}.md"
         target.write_text(render(payload), encoding="utf-8")
-        append_memory_entry(memory_path, memory_builder(path.name, payload))
         if after_import is not None:
             after_import(path.stem, payload)
-        known_items.append(path.name)
-        imported.append(path.name)
-    return known_items, imported
+        known_items[path.name] = fingerprint
+        changed.append(path.name)
+
+    for name in list(known_items):
+        if name not in current_names:
+            known_items.pop(name, None)
+            stale_target = destination_dir / f"{Path(name).stem}.md"
+            if stale_target.exists():
+                stale_target.unlink()
+    return known_items, changed
 
 
 def main() -> None:
     args = parse_args()
     pull_result = maybe_pull_repo() if args.pull else None
     sync_state = state()
-    minder_idea_logs: list[str] = []
-    minder_learning_logs: list[str] = []
     bilibili_sync_results: list[dict[str, Any]] = []
 
-    def after_idea_import(_stem: str, payload: dict[str, Any]) -> None:
-        minder_idea_logs.append(sync_idea_into_minder(payload))
-
     def after_learning_import(stem: str, payload: dict[str, Any]) -> None:
-        minder_learning_logs.append(sync_learning_into_minder(payload))
         bilibili_sync_results.append(sync_learning_into_bilibili(stem, payload))
 
     sync_state["ideas"], imported_ideas = sync_bucket(
@@ -374,19 +567,30 @@ def main() -> None:
         destination_dir=LOCAL_IDEAS_DIR,
         known_items=sync_state["ideas"],
         render=render_idea_markdown,
-        memory_path=IDEA_MEMORY_LEDGER,
-        memory_builder=build_idea_memory_entry,
-        after_import=after_idea_import,
     )
     sync_state["learnings"], imported_learnings = sync_bucket(
         source_dir=LEARNINGS_DIR,
         destination_dir=LOCAL_LEARNINGS_DIR,
         known_items=sync_state["learnings"],
         render=render_learning_markdown,
-        memory_path=LEARNING_MEMORY_LEDGER,
-        memory_builder=build_learning_memory_entry,
         after_import=after_learning_import,
     )
+    idea_entries = load_payload_entries(IDEAS_DIR)
+    learning_entries = load_payload_entries(LEARNINGS_DIR)
+    rewrite_local_ledgers(idea_entries, learning_entries)
+    minder_idea_logs = rewrite_daily_logs(
+        MINDER_DAILY_IDEAS_DIR,
+        title_suffix="Ideas",
+        entries=idea_entries,
+        renderer=render_idea_daily_block,
+    )
+    minder_learning_logs = rewrite_daily_logs(
+        MINDER_DAILY_LEARNINGS_DIR,
+        title_suffix="Learning Updates",
+        entries=learning_entries,
+        renderer=render_learning_daily_block,
+    )
+    bilibili_sync_results.append(rewrite_bilibili_views(learning_entries))
     write_json(STATE_FILE, sync_state)
 
     payload = {

@@ -91,6 +91,44 @@ def clean_json_text(text: str) -> str:
     return match.group(0).strip() if match else stripped
 
 
+def collapse_whitespace(text: str) -> str:
+    return re.sub(r"\s+", " ", text or "").strip()
+
+
+def truncate_text(text: str, limit: int = 240) -> str:
+    collapsed = collapse_whitespace(text)
+    if len(collapsed) <= limit:
+        return collapsed
+    return collapsed[: limit - 1].rstrip() + "…"
+
+
+def split_hint_items(text: str) -> list[str]:
+    items = [collapse_whitespace(part) for part in re.split(r"[，,、；;。/\n]+", text or "")]
+    return [item for item in items if item]
+
+
+def looks_like_url(text: str) -> bool:
+    return bool(text and URL_RE.fullmatch(text.strip()))
+
+
+def extract_meta_value(html: str, keys: tuple[str, ...]) -> str:
+    patterns = []
+    for key in keys:
+        patterns.extend(
+            [
+                rf'<meta[^>]+property=["\']{re.escape(key)}["\'][^>]+content=["\'](.*?)["\']',
+                rf'<meta[^>]+content=["\'](.*?)["\'][^>]+property=["\']{re.escape(key)}["\']',
+                rf'<meta[^>]+name=["\']{re.escape(key)}["\'][^>]+content=["\'](.*?)["\']',
+                rf'<meta[^>]+content=["\'](.*?)["\'][^>]+name=["\']{re.escape(key)}["\']',
+            ]
+        )
+    for pattern in patterns:
+        match = re.search(pattern, html, re.I | re.S)
+        if match:
+            return collapse_whitespace(re.sub(r"<[^>]+>", " ", match.group(1)))
+    return ""
+
+
 def fetch_text_response(url: str) -> tuple[str, str]:
     if requests is not None:
         response = requests.get(url, timeout=20, headers={"User-Agent": "Mozilla/5.0"})
@@ -207,6 +245,25 @@ def article_extract(url: str) -> dict[str, Any]:
     return result
 
 
+def html_video_extract(url: str) -> dict[str, Any]:
+    html, final_url = fetch_text_response(url)
+    title = extract_meta_value(html, ("og:title", "twitter:title", "title"))
+    if not title:
+        title_match = re.search(r"<title[^>]*>(.*?)</title>", html, re.I | re.S)
+        title = collapse_whitespace(title_match.group(1)) if title_match else url
+    description = extract_meta_value(html, ("og:description", "description", "twitter:description"))
+    parsed = urlparse(final_url)
+    return {
+        "url": url,
+        "resolved_url": final_url,
+        "kind": "video",
+        "title": title or url,
+        "description": description[:8000],
+        "domain": parsed.netloc,
+        "extraction_note": "Used HTML page metadata fallback because yt-dlp was unavailable or unsupported.",
+    }
+
+
 def direct_video_extract(url: str) -> dict[str, Any]:
     headers, final_url = fetch_headers(url)
     parsed = urlparse(final_url)
@@ -247,11 +304,17 @@ def video_extract(url: str) -> dict[str, Any]:
                 "thumbnail": metadata.get("thumbnail") or "",
             }
         if infer_source_type(url) == "video":
-            return direct_video_extract(url)
+            try:
+                return html_video_extract(url)
+            except Exception:
+                return direct_video_extract(url)
         raise RuntimeError(result.stderr.strip() or result.stdout.strip() or "yt-dlp metadata extraction failed")
 
     if infer_source_type(url) == "video":
-        return direct_video_extract(url)
+        try:
+            return html_video_extract(url)
+        except Exception:
+            return direct_video_extract(url)
     raise RuntimeError("yt-dlp is unavailable and the source URL does not look like a direct video link.")
 
 
@@ -299,6 +362,71 @@ def summarize_with_openai(payload: dict[str, Any]) -> tuple[dict[str, Any] | Non
         return None, str(exc)
 
 
+def heuristic_analysis(payload: dict[str, Any]) -> dict[str, Any]:
+    extraction = payload.get("extraction") or {}
+    source_type = payload.get("source_type", "")
+    raw_title = extraction.get("title") or payload.get("source_title") or ""
+    title = raw_title if raw_title and not looks_like_url(raw_title) else ""
+    title = title or payload.get("title") or payload.get("source_url") or ""
+    description = extraction.get("description") or extraction.get("text_excerpt") or ""
+    why_good = collapse_whitespace(payload.get("why_good", ""))
+    wanted_outputs = split_hint_items(payload.get("wanted_outputs", ""))
+    summary_seed = description or why_good or title
+    source_summary = truncate_text(summary_seed or title or payload.get("source_url", ""), limit=180)
+
+    reusable_patterns: list[str] = []
+    hook_observations: list[str] = []
+    local_adaptation_ideas: list[str] = []
+    tags: list[str] = [source_type or "learning"]
+
+    if title:
+        reusable_patterns.append(f"先用“{truncate_text(title, 36)}”这类明确主题或情绪入口定调，再展开内容。")
+        hook_observations.append(f"标题或封面要先传达“{truncate_text(title, 24)}”的核心情绪。")
+    if why_good:
+        reusable_patterns.append(f"优先复用这条内容最打人的感受层：{truncate_text(why_good, 60)}。")
+        hook_observations.append(f"前 1 到 3 秒先让观众感到：{truncate_text(why_good, 48)}。")
+
+    if source_type == "video":
+        reusable_patterns.append("先找情绪钩子和画面转折点，再安排字幕、反应镜头和特效节奏。")
+        local_adaptation_ideas.append("做猫 meme 时，把最强情绪点拆成“主反应猫 + 补刀猫 + 字幕翻转”三拍。")
+        local_adaptation_ideas.append("特效只放在情绪翻转或反应放大的瞬间，不要全程铺满。")
+        tags.append("video")
+    else:
+        reusable_patterns.append("先把核心观点压成一句短句，再拆成可单独成段的表达。")
+        local_adaptation_ideas.append("做猫 meme 时，先把文章观点改成一句冲突字幕，再配对应反应猫。")
+        tags.append("article")
+
+    for item in wanted_outputs[:3]:
+        reusable_patterns.append(f"这次学习重点是：{item}。输出时围绕这个目标回看结构。")
+        tags.append(item)
+        if "钩子" in item:
+            hook_observations.append("开头不要直接讲结论，先抛出冲突或情绪失衡感，再让角色反应接住。")
+            local_adaptation_ideas.append("猫 meme 开场先放一句冲突字幕，再让惊讶猫或质问猫在第 2 拍接上。")
+        if "特效" in item:
+            reusable_patterns.append("特效服务情绪升级，不单独抢戏；先定节奏点，再决定闪白、定格或放大。")
+            local_adaptation_ideas.append("猫 meme 里优先用定格、轻微放大、闪白和节奏字幕，不要上复杂转场。")
+        if "节奏" in item:
+            reusable_patterns.append("节奏先轻后重，最后一拍留给反转或情绪落点。")
+
+    reusable_patterns = list(dict.fromkeys(item for item in reusable_patterns if item))
+    hook_observations = list(dict.fromkeys(item for item in hook_observations if item))
+    local_adaptation_ideas = list(dict.fromkeys(item for item in local_adaptation_ideas if item))
+    tags = list(dict.fromkeys(item for item in tags if item))
+
+    return {
+        "source_summary": source_summary or title,
+        "reusable_patterns": reusable_patterns,
+        "hook_observations": hook_observations,
+        "local_adaptation_ideas": local_adaptation_ideas,
+        "tags": tags,
+        "memory_summary": truncate_text(
+            f"{title} 这条内容值得记住的不是素材本身，而是它先用情绪抓人，再用结构和节奏把感受放大。",
+            limit=140,
+        ),
+        "reuse_hint": "下次做猫 meme 时，先把这条学习拆成“开场钩子 / 反应节奏 / 特效落点”三列，再回头挑猫素材。",
+    }
+
+
 def build_learning_payload(meta: dict[str, Any], sections: dict[str, str]) -> dict[str, Any]:
     source_type = sections.get("来源类型", "").strip().lower()
     source_url = sections.get("来源链接", "").strip() or extract_first_url(meta.get("body", ""))
@@ -337,9 +465,12 @@ def build_learning_payload(meta: dict[str, Any], sections: dict[str, str]) -> di
         payload["extraction_error"] = str(exc)
 
     summary, summary_error = summarize_with_openai(payload)
-    payload["analysis"] = summary
+    fallback_summary = heuristic_analysis(payload) if payload["extraction_status"] == "completed" else None
+    payload["analysis"] = summary or fallback_summary
     if summary:
         payload["analysis_status"] = "ai_completed"
+    elif fallback_summary:
+        payload["analysis_status"] = "heuristic_completed"
     elif payload["extraction_status"] == "completed":
         payload["analysis_status"] = "raw_extracted_only"
     else:
