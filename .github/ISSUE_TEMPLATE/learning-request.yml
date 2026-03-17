@@ -1,0 +1,52 @@
+name: 内容解析请求
+description: 发一条文章或视频给云端处理，后面同步到本地学习库
+title: "学习请求："
+labels:
+  - learning-request
+  - mobile-inbox
+body:
+  - type: dropdown
+    id: source_type
+    attributes:
+      label: 来源类型
+      options:
+        - article
+        - video
+    validations:
+      required: true
+  - type: input
+    id: source_url
+    attributes:
+      label: 来源链接
+      description: 公开可访问链接；视频也可以贴公开视频链接
+      placeholder: https://...
+    validations:
+      required: true
+  - type: input
+    id: source_title
+    attributes:
+      label: 来源标题（可选）
+      placeholder: 你看到的标题或一句备注
+    validations:
+      required: false
+  - type: textarea
+    id: why_good
+    attributes:
+      label: 你觉得它哪里好
+      placeholder: 例如：开头很强、节奏很好、梗很密、结构适合复用
+    validations:
+      required: true
+  - type: textarea
+    id: wanted_outputs
+    attributes:
+      label: 你希望我重点提炼什么
+      placeholder: 例如：帮我拆钩子、节奏、标题结构、可迁移方法
+    validations:
+      required: true
+  - type: textarea
+    id: extra_context
+    attributes:
+      label: 补充说明（可选）
+      placeholder: 例如：最后要同步到本地学习库，并给出适合猫meme账号的应用方式
+    validations:
+      required: false

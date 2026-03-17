@@ -1,0 +1,42 @@
+name: 灵感收件箱
+description: 从手机快速投递一个灵感，稍后同步到本地
+title: "灵感："
+labels:
+  - idea-inbox
+  - mobile-inbox
+body:
+  - type: textarea
+    id: idea_summary
+    attributes:
+      label: 灵感一句话
+      description: 你现在想到的核心灵感
+      placeholder: 例如：猫meme可以做“前后反差+最后一秒翻转”系列
+    validations:
+      required: true
+  - type: textarea
+    id: why_it_matters
+    attributes:
+      label: 为什么值得记下来
+      placeholder: 例如：这个结构容易复制，也适合短视频快节奏
+    validations:
+      required: false
+  - type: dropdown
+    id: bucket
+    attributes:
+      label: 灵感归类
+      options:
+        - 选题
+        - 钩子
+        - 视频结构
+        - 产品想法
+        - 运营动作
+        - 其他
+    validations:
+      required: true
+  - type: textarea
+    id: next_step
+    attributes:
+      label: 你希望后面怎么处理
+      placeholder: 例如：等我开电脑时同步到本地灵感库，并给出 3 个可落地方向
+    validations:
+      required: false

@@ -1,0 +1,85 @@
+name: Cloud Hub Issue Ingest
+
+on:
+  issues:
+    types: [opened, edited, reopened]
+
+permissions:
+  contents: write
+  issues: write
+
+jobs:
+  process:
+    if: |
+      contains(join(github.event.issue.labels.*.name, ','), 'idea-inbox') ||
+      contains(join(github.event.issue.labels.*.name, ','), 'learning-request')
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install processing dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install requests trafilatura yt-dlp openai
+
+      - name: Process issue into cloud hub
+        id: process_issue
+        env:
+          OPENAI_API_KEY: ${{ secrets.OPENAI_API_KEY }}
+          OPENAI_MODEL: ${{ vars.OPENAI_MODEL }}
+        run: |
+          result="$(python scripts/process_cloud_issue.py \
+            --event-path "$GITHUB_EVENT_PATH" \
+            --repo-root "$GITHUB_WORKSPACE")"
+          echo "$result"
+          {
+            echo 'result_json<<EOF'
+            echo "$result"
+            echo 'EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Commit cloud hub updates
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add cloud
+          if git diff --cached --quiet; then
+            echo "No cloud hub changes to commit."
+            exit 0
+          fi
+          git commit -m "Update cloud hub from issue #${{ github.event.issue.number }}"
+          git push
+
+      - name: Comment back to issue
+        uses: actions/github-script@v7
+        env:
+          RESULT_JSON: ${{ steps.process_issue.outputs.result_json }}
+        with:
+          script: |
+            const result = JSON.parse(process.env.RESULT_JSON);
+            const workspace = process.env.GITHUB_WORKSPACE || "";
+            const relativePath = result.path.startsWith(workspace)
+              ? result.path.slice(workspace.length + 1)
+              : result.path;
+            const lines = [
+              "云端已接收并处理这条请求。",
+              `- 类型: ${result.kind}`,
+              `- 云端输出: \`${relativePath}\``,
+            ];
+            if (result.extraction_status) {
+              lines.push(`- 提取状态: ${result.extraction_status}`);
+            }
+            if (result.analysis_status) {
+              lines.push(`- 学习状态: ${result.analysis_status}`);
+            }
+            lines.push("", "你开电脑后，本地同步脚本会把它导入到本地灵感库或学习库。");
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: context.issue.number,
+              body: lines.join("\n"),
+            });

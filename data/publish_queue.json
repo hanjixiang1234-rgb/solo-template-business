@@ -1,0 +1,41 @@
+[
+  {
+    "slot": "night",
+    "post": "content/xiaohongshu/POST_003.md",
+    "status": "scheduled_native",
+    "note": "Queued in Xiaohongshu native scheduler for 2026-03-15 22:32"
+  },
+  {
+    "slot": "morning",
+    "post": "content/xiaohongshu/POST_001.md",
+    "status": "published_manual_recovery",
+    "last_attempt_at": "2026-03-16T12:51:42+08:00",
+    "published_at": "2026-03-16T12:58:24+08:00",
+    "publish_output": "Published via direct CDP recovery after queue script failed."
+  },
+  {
+    "slot": "night",
+    "post": "content/xiaohongshu/POST_007.md",
+    "status": "pending"
+  },
+  {
+    "slot": "morning",
+    "post": "content/xiaohongshu/POST_002.md",
+    "status": "pending"
+  },
+  {
+    "slot": "night",
+    "post": "content/xiaohongshu/POST_004.md",
+    "status": "pending"
+  },
+  {
+    "slot": "morning",
+    "post": "content/xiaohongshu/POST_005.md",
+    "status": "pending"
+  },
+  {
+    "slot": "night",
+    "post": "content/xiaohongshu/POST_006.md",
+    "status": "pending"
+  }
+]

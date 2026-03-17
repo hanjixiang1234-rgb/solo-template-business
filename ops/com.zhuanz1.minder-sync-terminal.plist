@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zhuanz1.minder-sync-terminal</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/usr/bin/osascript</string>
+    <string>-e</string>
+    <string>tell application "Terminal"</string>
+    <string>-e</string>
+    <string>set syncCommand to "cd /Users/Zhuanz1/Documents/solo-template-business &amp;&amp; /usr/bin/python3 /Users/Zhuanz1/Documents/solo-template-business/scripts/sync_cloud_hub_to_local.py --pull --trigger-label launchd-terminal &gt; /Users/Zhuanz1/Library/Logs/minder_sync.stdout.log 2&gt; /Users/Zhuanz1/Library/Logs/minder_sync.stderr.log; exit"</string>
+    <string>-e</string>
+    <string>do script syncCommand</string>
+    <string>-e</string>
+    <string>set miniaturized of front window to true</string>
+    <string>-e</string>
+    <string>end tell</string>
+  </array>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>900</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/Zhuanz1/Library/Logs/minder_sync.launchd.stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/Zhuanz1/Library/Logs/minder_sync.launchd.stderr.log</string>
+</dict>
+</plist>

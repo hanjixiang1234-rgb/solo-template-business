@@ -1,0 +1,149 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+    <meta name="theme-color" content="#f36a2d" />
+    <title>XHS Mobile Control</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700;800&family=Space+Grotesk:wght@500;700&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="/mobile_panel/styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="hero">
+        <p class="eyebrow">Android Remote Deck</p>
+        <h1>XHS Mobile Control</h1>
+        <p class="hero-copy">
+          这是给安卓手机用的遥控面板原型。先管队列、灵感和排期预演，后面再接真正的云端中枢。
+        </p>
+        <div class="hero-actions">
+          <button class="primary" id="refresh-status">刷新状态</button>
+          <button class="secondary" id="preview-plan">预演排期</button>
+        </div>
+      </header>
+
+      <main class="panel-grid">
+        <section class="card metrics-card">
+          <div class="card-head">
+            <h2>当前状态</h2>
+            <span id="generated-at" class="tiny"></span>
+          </div>
+          <div class="metrics" id="metrics"></div>
+          <div class="subpanel">
+            <div class="subpanel-head">
+              <h3>待处理收件箱</h3>
+              <button class="ghost" id="sync-inbox">导入收件箱</button>
+            </div>
+            <div id="incoming-requests" class="list compact-list"></div>
+          </div>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>快速动作</h2>
+            <span class="tiny">先做安全动作</span>
+          </div>
+          <div class="quick-actions">
+            <button class="action warm" data-action="preview">预演下一轮排期</button>
+            <button class="action ink" data-action="sync">真实导入收件箱</button>
+            <button class="action ember" data-action="reconcile-live">真实排期到小红书</button>
+          </div>
+          <p class="hint">
+            “真实排期”会调用本地浏览器登录态并尝试写入小红书原生定时，只在你确认要这么做时点击。
+          </p>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>加入现成帖子</h2>
+            <span class="tiny">从手机推进队列</span>
+          </div>
+          <form id="queue-form" class="stack-form">
+            <label>
+              <span>帖子</span>
+              <select id="post-select" required></select>
+            </label>
+            <label>
+              <span>时段</span>
+              <div class="segmented">
+                <label><input type="radio" name="queue-slot" value="morning" checked /> 早上</label>
+                <label><input type="radio" name="queue-slot" value="night" /> 晚上</label>
+              </div>
+            </label>
+            <label>
+              <span>备注</span>
+              <textarea id="queue-note" rows="3" placeholder="比如：改成明天早上优先"></textarea>
+            </label>
+            <button class="primary" type="submit">提交并导入</button>
+          </form>
+        </section>
+
+        <section class="card">
+          <div class="card-head">
+            <h2>记录新想法</h2>
+            <span class="tiny">先落地，再慢慢写</span>
+          </div>
+          <form id="idea-form" class="stack-form">
+            <label>
+              <span>标题</span>
+              <input id="idea-title" required placeholder="例如：下午最该补的不是咖啡 Part 2" />
+            </label>
+            <label>
+              <span>建议时段</span>
+              <div class="segmented">
+                <label><input type="radio" name="idea-slot" value="morning" checked /> 早上</label>
+                <label><input type="radio" name="idea-slot" value="night" /> 晚上</label>
+              </div>
+            </label>
+            <label>
+              <span>灵感补充</span>
+              <textarea id="idea-notes" rows="4" placeholder="写主题、语气、挂钩点"></textarea>
+            </label>
+            <button class="primary alt" type="submit">存进收件箱并导入</button>
+          </form>
+        </section>
+
+        <section class="card wide">
+          <div class="card-head">
+            <h2>下一轮排期预演</h2>
+            <span class="tiny">只看，不落地</span>
+          </div>
+          <div id="upcoming-plan" class="plan-list"></div>
+        </section>
+
+        <section class="card wide">
+          <div class="card-head">
+            <h2>帖子池</h2>
+            <span class="tiny">可直接从手机加入队列</span>
+          </div>
+          <div id="post-gallery" class="post-gallery"></div>
+        </section>
+
+        <section class="card wide">
+          <div class="card-head">
+            <h2>最近运行记录</h2>
+            <span class="tiny">看面板有没有真的干活</span>
+          </div>
+          <div class="log-columns">
+            <div>
+              <h3>发布与排期</h3>
+              <div id="publish-runs" class="list log-list"></div>
+            </div>
+            <div>
+              <h3>手机收件箱</h3>
+              <div id="inbox-runs" class="list log-list"></div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div id="toast" class="toast hidden"></div>
+    <script src="/mobile_panel/app.js" defer></script>
+  </body>
+</html>

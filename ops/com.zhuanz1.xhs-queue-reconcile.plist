@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "https://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.zhuanz1.xhs-queue-reconcile</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/Users/Zhuanz1/Documents/solo-template-business/scripts/run_xhs_publish_reconciler.sh</string>
+    <string>--trigger-label</string>
+    <string>launchd</string>
+  </array>
+
+  <key>WorkingDirectory</key>
+  <string>/Users/Zhuanz1/Documents/solo-template-business</string>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>StartInterval</key>
+  <integer>1800</integer>
+
+  <key>StandardOutPath</key>
+  <string>/Users/Zhuanz1/Documents/solo-template-business/data/automation_logs/xhs_reconciler.stdout.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/Zhuanz1/Documents/solo-template-business/data/automation_logs/xhs_reconciler.stderr.log</string>
+</dict>
+</plist>
