@@ -1,0 +1,35 @@
+{
+  "kind": "learning",
+  "issue_number": 2,
+  "issue_url": "https://github.com/hanjixiang1234-rgb/solo-template-business/issues/2",
+  "submitted_at": "2026-03-17T18:01:05Z",
+  "submitted_by": "hanjixiang1234-rgb",
+  "title": "学习请求：这个能引起人们思考",
+  "source_type": "video",
+  "source_url": "https://b23.tv/Wnm3x2P",
+  "source_title": "",
+  "why_good": "我觉得他能调动人的伤感的情绪，让人震惊，我长大了已经",
+  "wanted_outputs": "拆解钩子，学习特效",
+  "extra_context": "把学到的东西同步到对应文件夹的学习日志里面",
+  "raw_sections": {
+    "来源类型": "video",
+    "来源链接": "https://b23.tv/Wnm3x2P",
+    "来源标题（可选）": "",
+    "你觉得它哪里好": "我觉得他能调动人的伤感的情绪，让人震惊，我长大了已经",
+    "你希望我重点提炼什么": "拆解钩子，学习特效",
+    "补充说明（可选）": "把学到的东西同步到对应文件夹的学习日志里面"
+  },
+  "extraction": {
+    "url": "https://b23.tv/Wnm3x2P",
+    "resolved_url": "https://www.bilibili.com/video/BV1Jir9BXEEo/?buvid=XX678D864FE475C2B72724E375982DF88857E&from_spmid=search.search-result.0.0&is_story_h5=false&mid=FD%2Feh6T5VcWisTRWsQKiGg%3D%3D&p=1&plat_id=116&share_from=ugc&share_medium=android&share_plat=android&share_session_id=1ee66da0-13ca-4a15-85e5-5d4e449a1d0f&share_source=COPY&share_tag=s_i&spmid=united.player-video-detail.0.0&timestamp=1773770325&unique_k=Wnm3x2P&up_id=108138282",
+    "kind": "video",
+    "title": "BV1Jir9BXEEo",
+    "content_type": "text/html; charset=utf-8",
+    "content_length": "",
+    "domain": "www.bilibili.com",
+    "extraction_note": "Used direct URL metadata fallback because yt-dlp was unavailable or unsupported."
+  },
+  "extraction_status": "completed",
+  "analysis": null,
+  "analysis_status": "raw_extracted_only"
+}
