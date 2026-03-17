@@ -23,6 +23,7 @@ SECTION_RE = re.compile(r"^###\s+(.+?)\n(.*?)(?=^###\s+|\Z)", re.S | re.M)
 URL_RE = re.compile(r"https?://\S+")
 DEFAULT_OPENAI_MODEL = "gpt-5-mini"
 VIDEO_HOST_HINTS = (
+    "b23.tv",
     "youtube.com",
     "youtu.be",
     "bilibili.com",
@@ -134,10 +135,17 @@ def issue_metadata(event_payload: dict[str, Any]) -> dict[str, Any]:
     }
 
 
-def choose_issue_kind(labels: list[str]) -> str | None:
+def choose_issue_kind(meta: dict[str, Any]) -> str | None:
+    labels = meta.get("labels", [])
     if "idea-inbox" in labels:
         return "idea"
     if "learning-request" in labels:
+        return "learning"
+    title = (meta.get("title") or "").strip()
+    body = meta.get("body") or ""
+    if title.startswith("灵感：") or "### 灵感一句话" in body:
+        return "idea"
+    if title.startswith("学习请求：") or "### 来源类型" in body:
         return "learning"
     return None
 
@@ -354,7 +362,7 @@ def main() -> None:
     repo_root = Path(args.repo_root).resolve()
     event_payload = read_json(Path(args.event_path))
     meta = issue_metadata(event_payload)
-    kind = choose_issue_kind(meta["labels"])
+    kind = choose_issue_kind(meta)
     if kind is None:
         raise SystemExit("Issue does not match a supported cloud hub label.")
 

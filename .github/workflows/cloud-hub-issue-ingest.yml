@@ -12,7 +12,9 @@ jobs:
   process:
     if: |
       contains(join(github.event.issue.labels.*.name, ','), 'idea-inbox') ||
-      contains(join(github.event.issue.labels.*.name, ','), 'learning-request')
+      contains(join(github.event.issue.labels.*.name, ','), 'learning-request') ||
+      startsWith(github.event.issue.title, '灵感：') ||
+      startsWith(github.event.issue.title, '学习请求：')
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
