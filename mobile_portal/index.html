@@ -1,0 +1,177 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+    <title>Minder Portal</title>
+    <meta
+      name="description"
+      content="手机端灵感收件箱与内容学习入口，提交后进入云端处理，再同步回本地。"
+    />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <p class="eyebrow">Minder Portal</p>
+        <h1>手机上想到，云端先处理，电脑上线再自动同步。</h1>
+        <p class="lede">
+          这里是你给我发灵感、发文章、发猫 meme 视频的统一入口。提交后会进入云端工作流，
+          后面自动回流到本地灵感库、学习库，以及
+          <span class="mono">bilibili-cat-meme</span> 的学习补充层。
+        </p>
+        <div class="status-card">
+          <p class="status-title">当前同步方向</p>
+          <p class="status-value">Phone → Cloud → minder → bilibili-cat-meme</p>
+        </div>
+      </section>
+
+      <section class="switcher">
+        <button class="tab active" data-tab="idea" type="button">记录灵感</button>
+        <button class="tab" data-tab="learning" type="button">发文章 / 视频</button>
+      </section>
+
+      <section class="panel active" id="panel-idea">
+        <form id="idea-form" class="card form-card">
+          <label>
+            <span>灵感标题</span>
+            <input name="title" maxlength="80" placeholder="例如：猫meme反差翻转结构" required />
+          </label>
+
+          <label>
+            <span>灵感一句话</span>
+            <textarea
+              name="idea_summary"
+              rows="4"
+              maxlength="400"
+              placeholder="把你此刻最核心的想法写给我。"
+              required
+            ></textarea>
+          </label>
+
+          <label>
+            <span>为什么值得记下来</span>
+            <textarea
+              name="why_it_matters"
+              rows="3"
+              maxlength="300"
+              placeholder="例如：这个结构容易复制，适合高频短视频。"
+            ></textarea>
+          </label>
+
+          <label>
+            <span>灵感归类</span>
+            <select name="bucket" required>
+              <option value="选题">选题</option>
+              <option value="钩子">钩子</option>
+              <option value="视频结构">视频结构</option>
+              <option value="产品想法">产品想法</option>
+              <option value="运营动作">运营动作</option>
+              <option value="其他">其他</option>
+            </select>
+          </label>
+
+          <label>
+            <span>你希望后面怎么处理</span>
+            <textarea
+              name="next_step"
+              rows="3"
+              maxlength="300"
+              placeholder="例如：回到电脑后同步到 minder，并给我 3 个能落地的猫meme方向。"
+            ></textarea>
+          </label>
+
+          <div class="actions">
+            <button class="primary" type="submit">打开云端提交页</button>
+            <button class="secondary" type="button" data-copy="idea">复制内容</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="panel" id="panel-learning">
+        <form id="learning-form" class="card form-card">
+          <label>
+            <span>请求标题</span>
+            <input name="title" maxlength="80" placeholder="例如：这个猫meme视频节奏很好" required />
+          </label>
+
+          <label>
+            <span>来源类型</span>
+            <div class="segmented">
+              <label class="segmented-item">
+                <input type="radio" name="source_type" value="article" checked />
+                <span>文章</span>
+              </label>
+              <label class="segmented-item">
+                <input type="radio" name="source_type" value="video" />
+                <span>视频</span>
+              </label>
+            </div>
+          </label>
+
+          <label>
+            <span>来源链接</span>
+            <input name="source_url" type="url" placeholder="https://..." required />
+          </label>
+
+          <label>
+            <span>来源标题（可选）</span>
+            <input name="source_title" maxlength="120" placeholder="你看到的标题或一句备注" />
+          </label>
+
+          <label>
+            <span>你觉得它哪里好</span>
+            <textarea
+              name="why_good"
+              rows="3"
+              maxlength="400"
+              placeholder="例如：开头很强、节奏很好、梗很密、结构适合复用。"
+              required
+            ></textarea>
+          </label>
+
+          <label>
+            <span>你希望我重点提炼什么</span>
+            <textarea
+              name="wanted_outputs"
+              rows="4"
+              maxlength="500"
+              placeholder="例如：帮我拆钩子、节奏、标题结构、可迁移方法。"
+              required
+            ></textarea>
+          </label>
+
+          <label>
+            <span>补充说明</span>
+            <textarea
+              name="extra_context"
+              rows="3"
+              maxlength="300"
+              placeholder="例如：同步到 bilibili-cat-meme，并更新今天的学习日志。"
+            ></textarea>
+          </label>
+
+          <div class="actions">
+            <button class="primary" type="submit">打开云端提交页</button>
+            <button class="secondary" type="button" data-copy="learning">复制内容</button>
+          </div>
+        </form>
+      </section>
+
+      <section class="card notes">
+        <h2>提交流程</h2>
+        <ol>
+          <li>在这里填完内容，点“打开云端提交页”。</li>
+          <li>页面会跳到 GitHub 的预填提交页，你只需要点一次 `Submit new issue`。</li>
+          <li>云端开始处理，电脑一上线就会自动同步到本地。</li>
+        </ol>
+        <p class="muted">
+          这版入口已经把交互收拢到一个手机页面里了，但最后一步仍然会用 GitHub 帐号提交，
+          因为云端中枢当前就跑在 GitHub 上。
+        </p>
+      </section>
+    </main>
+
+    <script src="./app.js"></script>
+  </body>
+</html>
