@@ -3,9 +3,6 @@ name: Deploy Mobile Portal
 on:
   push:
     branches: ["main"]
-    paths:
-      - "mobile_portal/**"
-      - ".github/workflows/mobile-portal-pages.yml"
   workflow_dispatch:
 
 permissions:
