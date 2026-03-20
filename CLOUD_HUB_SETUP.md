@@ -28,6 +28,7 @@
 
 - GitHub Actions 立刻把这条灵感整理成结构化 JSON
 - 存到 `cloud/inbox/ideas/`
+- 同时生成云端阅读版和每日汇总到 `cloud/views/`
 
 你开电脑后会发生的事：
 
@@ -51,6 +52,10 @@
 - 视频：优先用 `yt-dlp` 抽元数据；如果是直链视频，会退回到直链元数据提取
 - 如果配置了 `OPENAI_API_KEY`，会进一步生成结构化学习总结
 - 结果存到 `cloud/processed/`
+- 同时生成云端阅读版到 `cloud/views/learnings/`
+- 同时更新云端每日学习汇总到 `cloud/views/daily_learning_updates/`
+- 同时更新猫meme线程上下文到 `cloud/thread_sync/cat_meme_learning_context.md`
+- 同时更新猫meme方法卡片到 `cloud/thread_sync/cat_meme_method_cards.md`
 
 你开电脑后会发生的事：
 
@@ -72,7 +77,7 @@ python3 scripts/sync_cloud_hub_to_local.py --pull --trigger-label manual
 
 1. 如果当前仓库已经连上 GitHub 上游，就先 `git pull --ff-only`
 2. 导入新的灵感和学习包
-3. 生成本地 markdown、本地记忆账本、`minder` 每日日志，以及 `bilibili-cat-meme` 学习镜像
+3. 把云端已经生成好的内容镜像到本地 markdown、本地记忆账本、`minder` 每日日志，以及 `bilibili-cat-meme` 学习镜像
 
 如果仓库还没连 GitHub，上面的 `pull` 会安静跳过，不会一直报错。
 
@@ -134,7 +139,8 @@ launchctl kickstart -k gui/$(id -u)/com.zhuanz1.minder-sync-terminal
 ### 在哪里运行
 
 - 文章和视频解析都运行在 GitHub Actions 的云端 runner
-- 本地电脑只负责后续同步和本地化沉淀
+- 云端还会直接生成 markdown 阅读版、每日汇总和猫meme线程上下文
+- 本地电脑只负责后续镜像同步和本地化沉淀
 
 ### 用什么在理解
 
