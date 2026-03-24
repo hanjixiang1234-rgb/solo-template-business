@@ -32,3 +32,17 @@ Role split:
 
 Current phase:
 - Phase 1: health-account positioning, content system, and first batch publishing.
+
+## Cloud Hub
+
+Phone-side and cloud-side inputs now use the GitHub repo itself as the stable control surface.
+
+- Mobile inbox chooser: [Issues new chooser](https://github.com/hanjixiang1234-rgb/solo-template-business/issues/new/choose)
+- Idea inbox: [idea-inbox](https://github.com/hanjixiang1234-rgb/solo-template-business/issues/new?template=idea-inbox.yml)
+- Learning request: [learning-request](https://github.com/hanjixiang1234-rgb/solo-template-business/issues/new?template=learning-request.yml)
+- Cloud control center: [CLOUD_HUB.md](https://github.com/hanjixiang1234-rgb/solo-template-business/blob/main/CLOUD_HUB.md)
+
+Operating boundary:
+- Phone submits intent.
+- GitHub Actions processes and writes cloud-readable outputs back into the repo.
+- The local Mac mirrors those outputs into `minder/` and `bilibili-cat-meme/` when it comes online.

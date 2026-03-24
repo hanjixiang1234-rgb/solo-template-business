@@ -69,7 +69,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add cloud
+          git add cloud CLOUD_HUB.md
           if git diff --cached --quiet; then
             echo "No cloud hub changes to commit."
             exit 0
@@ -86,6 +86,9 @@ jobs:
           script: |
             const result = JSON.parse(process.env.RESULT_JSON);
             const views = JSON.parse(process.env.VIEW_RESULT_JSON || "{}");
+            const repoBase = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}`;
+            const branch = context.payload.repository?.default_branch || "main";
+            const toBlobUrl = (relativePath) => `${repoBase}/blob/${branch}/${relativePath}`;
             const workspace = process.env.GITHUB_WORKSPACE || "";
             const relativePath = result.path.startsWith(workspace)
               ? result.path.slice(workspace.length + 1)
@@ -93,19 +96,25 @@ jobs:
             const lines = [
               "云端已接收并处理这条请求。",
               `- 类型: ${result.kind}`,
-              `- 云端输出: \`${relativePath}\``,
+              `- 云端输出: [${relativePath}](${toBlobUrl(relativePath)})`,
             ];
+            if (views.control_center) {
+              lines.push(`- 云端控制台: [${views.control_center}](${toBlobUrl(views.control_center)})`);
+            }
+            if (views.issue_chooser_url) {
+              lines.push(`- 手机提交入口: [模板选择页](${views.issue_chooser_url})`);
+            }
             if (views.focus_view) {
-              lines.push(`- 云端阅读版: \`${views.focus_view}\``);
+              lines.push(`- 云端阅读版: [${views.focus_view}](${toBlobUrl(views.focus_view)})`);
             }
             if (views.focus_daily_log) {
-              lines.push(`- 云端每日汇总: \`${views.focus_daily_log}\``);
+              lines.push(`- 云端每日汇总: [${views.focus_daily_log}](${toBlobUrl(views.focus_daily_log)})`);
             }
             if (views.focus_thread_context) {
-              lines.push(`- 猫meme线程上下文: \`${views.focus_thread_context}\``);
+              lines.push(`- 猫meme线程上下文: [${views.focus_thread_context}](${toBlobUrl(views.focus_thread_context)})`);
             }
             if (views.focus_method_cards) {
-              lines.push(`- 猫meme方法卡片: \`${views.focus_method_cards}\``);
+              lines.push(`- 猫meme方法卡片: [${views.focus_method_cards}](${toBlobUrl(views.focus_method_cards)})`);
             }
             if (result.extraction_status) {
               lines.push(`- 提取状态: ${result.extraction_status}`);

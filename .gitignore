@@ -20,3 +20,6 @@ minder/daily_ideas/*
 
 minder/daily_learning_updates/*
 !minder/daily_learning_updates/.gitkeep
+
+minder/sync_status/*
+!minder/sync_status/.gitkeep

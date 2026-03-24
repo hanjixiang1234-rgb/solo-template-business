@@ -2,6 +2,8 @@ from __future__ import annotations
 
 import argparse
 import json
+import re
+import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
@@ -31,11 +33,57 @@ def write_jsonl(path: Path, rows: list[dict[str, Any]]) -> None:
             handle.write(json.dumps(row, ensure_ascii=False) + "\n")
 
 
+def write_json(path: Path, payload: dict[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(payload, ensure_ascii=False, indent=2) + "\n", encoding="utf-8")
+
+
+def run_git(repo_root: Path, *args: str) -> str:
+    result = subprocess.run(
+        ["git", "-C", str(repo_root), *args],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
 def first_nonempty(*values: Any) -> str:
     for value in values:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def infer_repo_base_url(repo_root: Path) -> str:
+    remote = run_git(repo_root, "remote", "get-url", "origin")
+    if not remote:
+        return ""
+
+    https_match = re.match(r"https://github\.com/([^/]+/[^/.]+)(?:\.git)?$", remote)
+    if https_match:
+        return f"https://github.com/{https_match.group(1)}"
+
+    ssh_match = re.match(r"(?:ssh://)?git@[^:]+:(.+?)(?:\.git)?$", remote)
+    if ssh_match:
+        return f"https://github.com/{ssh_match.group(1)}"
+
+    alt_ssh_match = re.match(r"(?:ssh://)?git@[^/]+/(.+?)(?:\.git)?$", remote)
+    if alt_ssh_match:
+        return f"https://github.com/{alt_ssh_match.group(1)}"
+    return ""
+
+
+def infer_repo_branch(repo_root: Path) -> str:
+    return run_git(repo_root, "branch", "--show-current") or "main"
+
+
+def repo_blob_url(repo_base_url: str, branch: str, relative_path: str) -> str:
+    if not repo_base_url:
+        return relative_path
+    return f"{repo_base_url}/blob/{branch}/{relative_path}"
 
 
 def submitted_date(payload: dict[str, Any]) -> str:
@@ -362,15 +410,145 @@ def render_bilibili_method_cards(entries: list[tuple[str, dict[str, Any]]]) -> s
     return "\n".join(lines).strip() + "\n"
 
 
+def latest_entry(entries: list[tuple[str, dict[str, Any]]]) -> tuple[str, dict[str, Any]] | None:
+    if not entries:
+        return None
+    return entries[-1]
+
+
+def render_cloud_control_center(
+    *,
+    repo_base_url: str,
+    branch: str,
+    idea_entries: list[tuple[str, dict[str, Any]]],
+    learning_entries: list[tuple[str, dict[str, Any]]],
+) -> str:
+    latest_idea = latest_entry(idea_entries)
+    latest_learning = latest_entry(learning_entries)
+
+    def rel_link(relative_path: str, label: str) -> str:
+        return f"- [{label}]({repo_blob_url(repo_base_url, branch, relative_path)})"
+
+    def latest_item_block(
+        heading: str,
+        entry: tuple[str, dict[str, Any]] | None,
+        *,
+        relative_dir: str,
+        daily_dir: str,
+    ) -> list[str]:
+        if not entry:
+            return [f"## {heading}", "", "- 还没有记录。", ""]
+        stem, payload = entry
+        title = payload.get("title", stem)
+        day = submitted_date(payload)
+        return [
+            f"## {heading}",
+            "",
+            rel_link(f"{relative_dir}/{stem}.md", title),
+            rel_link(f"{daily_dir}/{day}.md", f"{day} 每日汇总"),
+            f"- Issue: {payload.get('issue_url', '')}",
+            "",
+        ]
+
+    lines = [
+        "# Cloud Hub Control Center",
+        "",
+        "这是手机端和云端共用的稳定控制台，不依赖本地临时网页。",
+        "电脑不开机时，云端会先处理输入并更新这里；电脑开机联网后，本地同步脚本再把结果镜像到本地。",
+        "",
+        "## 手机提交入口",
+        "",
+        f"- [模板选择页]({repo_base_url}/issues/new/choose)" if repo_base_url else "- 模板选择页：仓库已连接 GitHub，但当前未能推断远端地址。",
+        f"- [灵感收件箱]({repo_base_url}/issues/new?template=idea-inbox.yml)" if repo_base_url else "- 灵感收件箱：请从模板选择页进入。",
+        f"- [内容解析请求]({repo_base_url}/issues/new?template=learning-request.yml)" if repo_base_url else "- 内容解析请求：请从模板选择页进入。",
+        "",
+    ]
+    lines.extend(
+        latest_item_block(
+            "最新灵感",
+            latest_idea,
+            relative_dir="cloud/views/ideas",
+            daily_dir="cloud/views/daily_ideas",
+        )
+    )
+    lines.extend(
+        latest_item_block(
+            "最新学习",
+            latest_learning,
+            relative_dir="cloud/views/learnings",
+            daily_dir="cloud/views/daily_learning_updates",
+        )
+    )
+    lines.extend(
+        [
+            "## 猫 meme 线程同步入口",
+            "",
+            rel_link("cloud/thread_sync/cat_meme_learning_context.md", "线程上下文"),
+            rel_link("cloud/thread_sync/cat_meme_method_cards.md", "方法卡片"),
+            "",
+            "## 使用原则",
+            "",
+            "- 手机负责发灵感、发文章、发视频链接，不负责本地线程执行。",
+            "- 云端负责提取、总结、生成阅读版、重建猫 meme 线程上下文。",
+            "- 本地电脑负责把云端结果同步到 minder 和 bilibili-cat-meme。",
+            "",
+        ]
+    )
+    return "\n".join(lines).strip() + "\n"
+
+
+def build_cloud_index(
+    *,
+    repo_base_url: str,
+    branch: str,
+    idea_entries: list[tuple[str, dict[str, Any]]],
+    learning_entries: list[tuple[str, dict[str, Any]]],
+) -> dict[str, Any]:
+    latest_idea = latest_entry(idea_entries)
+    latest_learning = latest_entry(learning_entries)
+    latest_idea_day = submitted_date(latest_idea[1]) if latest_idea else ""
+    latest_learning_day = submitted_date(latest_learning[1]) if latest_learning else ""
+    latest_idea_path = f"cloud/views/ideas/{latest_idea[0]}.md" if latest_idea else ""
+    latest_learning_path = f"cloud/views/learnings/{latest_learning[0]}.md" if latest_learning else ""
+    return {
+        "generated_at": now_iso(),
+        "repo_base_url": repo_base_url,
+        "branch": branch,
+        "quick_links": {
+            "chooser": f"{repo_base_url}/issues/new/choose" if repo_base_url else "",
+            "idea_inbox": f"{repo_base_url}/issues/new?template=idea-inbox.yml" if repo_base_url else "",
+            "learning_request": f"{repo_base_url}/issues/new?template=learning-request.yml" if repo_base_url else "",
+            "control_center": repo_blob_url(repo_base_url, branch, "CLOUD_HUB.md"),
+            "thread_context": repo_blob_url(repo_base_url, branch, "cloud/thread_sync/cat_meme_learning_context.md"),
+            "method_cards": repo_blob_url(repo_base_url, branch, "cloud/thread_sync/cat_meme_method_cards.md"),
+        },
+        "latest": {
+            "idea_view": latest_idea_path,
+            "idea_view_url": repo_blob_url(repo_base_url, branch, latest_idea_path) if latest_idea_path else "",
+            "idea_daily_log": f"cloud/views/daily_ideas/{latest_idea_day}.md" if latest_idea_day else "",
+            "learning_view": latest_learning_path,
+            "learning_view_url": repo_blob_url(repo_base_url, branch, latest_learning_path) if latest_learning_path else "",
+            "learning_daily_log": f"cloud/views/daily_learning_updates/{latest_learning_day}.md" if latest_learning_day else "",
+        },
+    }
+
+
 def build_focus_summary(
     *,
     focus_path: str | None,
     idea_entries: list[tuple[str, dict[str, Any]]],
     learning_entries: list[tuple[str, dict[str, Any]]],
+    repo_base_url: str,
+    branch: str,
 ) -> dict[str, Any]:
     summary: dict[str, Any] = {
         "cloud_views_root": "cloud/views",
         "cloud_thread_sync_root": "cloud/thread_sync",
+        "control_center": "CLOUD_HUB.md",
+        "control_center_url": repo_blob_url(repo_base_url, branch, "CLOUD_HUB.md"),
+        "issue_chooser_url": f"{repo_base_url}/issues/new/choose" if repo_base_url else "",
+        "idea_inbox_url": f"{repo_base_url}/issues/new?template=idea-inbox.yml" if repo_base_url else "",
+        "learning_request_url": f"{repo_base_url}/issues/new?template=learning-request.yml" if repo_base_url else "",
     }
     if not focus_path:
         return summary
@@ -403,6 +581,8 @@ def build_focus_summary(
 def main() -> None:
     args = parse_args()
     repo_root = Path(args.repo_root).resolve()
+    repo_base_url = infer_repo_base_url(repo_root)
+    branch = infer_repo_branch(repo_root)
 
     ideas_dir = repo_root / "cloud" / "inbox" / "ideas"
     learnings_dir = repo_root / "cloud" / "processed"
@@ -448,6 +628,24 @@ def main() -> None:
         render_bilibili_method_cards(learning_entries),
         encoding="utf-8",
     )
+    (repo_root / "CLOUD_HUB.md").write_text(
+        render_cloud_control_center(
+            repo_base_url=repo_base_url,
+            branch=branch,
+            idea_entries=idea_entries,
+            learning_entries=learning_entries,
+        ),
+        encoding="utf-8",
+    )
+    write_json(
+        cloud_views_root / "latest_index.json",
+        build_cloud_index(
+            repo_base_url=repo_base_url,
+            branch=branch,
+            idea_entries=idea_entries,
+            learning_entries=learning_entries,
+        ),
+    )
 
     print(
         json.dumps(
@@ -455,6 +653,8 @@ def main() -> None:
                 focus_path=args.focus_path,
                 idea_entries=idea_entries,
                 learning_entries=learning_entries,
+                repo_base_url=repo_base_url,
+                branch=branch,
             ),
             ensure_ascii=False,
         )

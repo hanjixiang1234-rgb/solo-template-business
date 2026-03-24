@@ -7,22 +7,23 @@
 
 ## 手机入口
 
-优先使用这个手机端入口：
+当前最稳的永久入口，不是 `GitHub Pages`，而是仓库本身：
 
-- `GitHub Pages` 入口：`https://hanjixiang1234-rgb.github.io/solo-template-business/`
+- `模板选择页`：`https://github.com/hanjixiang1234-rgb/solo-template-business/issues/new/choose`
+- `灵感收件箱`：`https://github.com/hanjixiang1234-rgb/solo-template-business/issues/new?template=idea-inbox.yml`
+- `内容解析请求`：`https://github.com/hanjixiang1234-rgb/solo-template-business/issues/new?template=learning-request.yml`
+- `云端控制台`：`https://github.com/hanjixiang1234-rgb/solo-template-business/blob/main/CLOUD_HUB.md`
 
-这个页面会先在手机上收集你的内容，再跳到已经预填好的 GitHub 提交页。
-你不需要再自己手动选择模板和填写字段。
+`GitHub Pages` 入口现在仍然只是可选便利层；即使 Pages 没启用，上面这些仓库链接也能长期工作。
 
 ## 你在安卓上怎么用
 
 ### 灵感收件箱
 
 1. 打开 GitHub App 或手机浏览器里的仓库
-2. 进入 `Issues`
-3. 选择 `灵感收件箱`
-4. 填 1 句话灵感和你希望后面怎么处理
-5. 提交
+2. 进入 `模板选择页` 或直接打开 `灵感收件箱` 链接
+3. 填 1 句话灵感和你希望后面怎么处理
+4. 提交
 
 云端会做的事：
 
@@ -39,12 +40,11 @@
 
 ### 文章 / 视频学习请求
 
-1. 打开 `Issues`
-2. 选择 `内容解析请求`
-3. 选择 `article` 或 `video`
-4. 粘贴公开链接
-5. 告诉我你觉得它好在哪，以及你希望我重点提炼什么
-6. 提交
+1. 打开 `模板选择页` 或直接打开 `内容解析请求` 链接
+2. 选择 `article` 或 `video`
+3. 粘贴公开链接
+4. 告诉我你觉得它好在哪，以及你希望我重点提炼什么
+5. 提交
 
 云端会做的事：
 
@@ -56,6 +56,7 @@
 - 同时更新云端每日学习汇总到 `cloud/views/daily_learning_updates/`
 - 同时更新猫meme线程上下文到 `cloud/thread_sync/cat_meme_learning_context.md`
 - 同时更新猫meme方法卡片到 `cloud/thread_sync/cat_meme_method_cards.md`
+- 同时更新仓库根目录的 `CLOUD_HUB.md`，方便手机直接查看最新入口和最新结果
 
 你开电脑后会发生的事：
 
@@ -78,6 +79,13 @@ python3 scripts/sync_cloud_hub_to_local.py --pull --trigger-label manual
 1. 如果当前仓库已经连上 GitHub 上游，就先 `git pull --ff-only`
 2. 导入新的灵感和学习包
 3. 把云端已经生成好的内容镜像到本地 markdown、本地记忆账本、`minder` 每日日志，以及 `bilibili-cat-meme` 学习镜像
+
+每次同步后，还会重写：
+
+- `minder/sync_status/latest.md`
+- `minder/sync_status/latest.json`
+
+这样你一开电脑，就能直接看这次有没有真正把云端结果拉下来。
 
 如果仓库还没连 GitHub，上面的 `pull` 会安静跳过，不会一直报错。
 

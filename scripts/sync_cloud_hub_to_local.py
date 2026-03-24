@@ -3,6 +3,7 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import re
 import subprocess
 from datetime import datetime
 from pathlib import Path
@@ -30,6 +31,9 @@ STATE_FILE = PROJECT_ROOT / "data" / "cloud_sync_state.json"
 RUN_LOG = PROJECT_ROOT / "data" / "cloud_sync_runs.jsonl"
 IDEA_MEMORY_LEDGER = PROJECT_ROOT / "data" / "cloud_idea_memory.jsonl"
 LEARNING_MEMORY_LEDGER = PROJECT_ROOT / "data" / "cloud_learning_memory.jsonl"
+SYNC_STATUS_DIR = MINDER_ROOT / "sync_status"
+SYNC_STATUS_JSON = SYNC_STATUS_DIR / "latest.json"
+SYNC_STATUS_MD = SYNC_STATUS_DIR / "latest.md"
 
 
 def parse_args() -> argparse.Namespace:
@@ -76,6 +80,47 @@ def git_cmd(*args: str) -> list[str]:
             *args,
         ]
     return ["git", "-C", str(PROJECT_ROOT), *args]
+
+
+def git_stdout(*args: str) -> str:
+    result = subprocess.run(
+        git_cmd(*args),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.returncode != 0:
+        return ""
+    return result.stdout.strip()
+
+
+def infer_repo_base_url() -> str:
+    remote = git_stdout("remote", "get-url", "origin")
+    if not remote:
+        return ""
+
+    https_match = re.match(r"https://github\.com/([^/]+/[^/.]+)(?:\.git)?$", remote)
+    if https_match:
+        return f"https://github.com/{https_match.group(1)}"
+
+    ssh_match = re.match(r"(?:ssh://)?git@[^:]+:(.+?)(?:\.git)?$", remote)
+    if ssh_match:
+        return f"https://github.com/{ssh_match.group(1)}"
+
+    alt_ssh_match = re.match(r"(?:ssh://)?git@[^/]+/(.+?)(?:\.git)?$", remote)
+    if alt_ssh_match:
+        return f"https://github.com/{alt_ssh_match.group(1)}"
+    return ""
+
+
+def infer_repo_branch() -> str:
+    return git_stdout("branch", "--show-current") or "main"
+
+
+def repo_blob_url(repo_base_url: str, branch: str, relative_path: str) -> str:
+    if not repo_base_url:
+        return relative_path
+    return f"{repo_base_url}/blob/{branch}/{relative_path}"
 
 
 def submitted_date(payload: dict[str, Any]) -> str:
@@ -520,6 +565,83 @@ def sync_learning_into_bilibili(stem: str, payload: dict[str, Any]) -> dict[str,
     }
 
 
+def latest_entry(entries: list[tuple[str, dict[str, Any]]]) -> tuple[str, dict[str, Any]] | None:
+    if not entries:
+        return None
+    return entries[-1]
+
+
+def render_sync_status_markdown(
+    *,
+    payload: dict[str, Any],
+    idea_entries: list[tuple[str, dict[str, Any]]],
+    learning_entries: list[tuple[str, dict[str, Any]]],
+    repo_base_url: str,
+    branch: str,
+) -> str:
+    latest_idea = latest_entry(idea_entries)
+    latest_learning = latest_entry(learning_entries)
+    pull_result = payload.get("pull_result") or {}
+
+    def bullet(label: str, value: str) -> str:
+        return f"- {label}: {value}" if value else f"- {label}: (空)"
+
+    lines = [
+        "# Minder Sync Status",
+        "",
+        "这份状态页由本地同步脚本自动重写，用来确认电脑开机联网后有没有把云端结果拉回本地。",
+        "",
+        "## 本次运行",
+        "",
+        bullet("运行时间", payload.get("time", "")),
+        bullet("触发方式", payload.get("trigger_label", "")),
+        bullet("拉取状态", pull_result.get("status", "skipped") if isinstance(pull_result, dict) else "skipped"),
+        bullet("git pull 输出", (pull_result.get("stdout", "") or pull_result.get("stderr", "")).strip() if isinstance(pull_result, dict) else ""),
+        bullet("新导入灵感数", str(len(payload.get("imported_ideas", [])))),
+        bullet("新导入学习数", str(len(payload.get("imported_learnings", [])))),
+        "",
+        "## 手机端永久入口",
+        "",
+        f"- 模板选择页: {repo_base_url}/issues/new/choose" if repo_base_url else "- 模板选择页: 请直接打开 GitHub 仓库的 Issues。",
+        f"- 灵感收件箱: {repo_base_url}/issues/new?template=idea-inbox.yml" if repo_base_url else "- 灵感收件箱: 请从模板选择页进入。",
+        f"- 内容解析请求: {repo_base_url}/issues/new?template=learning-request.yml" if repo_base_url else "- 内容解析请求: 请从模板选择页进入。",
+        bullet("云端控制台", repo_blob_url(repo_base_url, branch, "CLOUD_HUB.md")),
+        "",
+    ]
+
+    if latest_idea:
+        stem, idea_payload = latest_idea
+        lines.extend(
+            [
+                "## 最新灵感同步",
+                "",
+                bullet("标题", idea_payload.get("title", stem)),
+                bullet("本地灵感文件", str(LOCAL_IDEAS_DIR / f"{stem}.md")),
+                bullet("每日日志", str(MINDER_DAILY_IDEAS_DIR / f"{submitted_date(idea_payload)}.md")),
+                bullet("云端阅读版", repo_blob_url(repo_base_url, branch, f"cloud/views/ideas/{stem}.md")),
+                "",
+            ]
+        )
+    if latest_learning:
+        stem, learning_payload = latest_learning
+        lines.extend(
+            [
+                "## 最新学习同步",
+                "",
+                bullet("标题", learning_payload.get("title", stem)),
+                bullet("本地学习文件", str(LOCAL_LEARNINGS_DIR / f"{stem}.md")),
+                bullet("minder 每日日志", str(MINDER_DAILY_LEARNINGS_DIR / f"{submitted_date(learning_payload)}.md")),
+                bullet("猫 meme 镜像", str(BILIBILI_LEARNINGS_DIR / f"{stem}.md")),
+                bullet("猫 meme 线程上下文", str(BILIBILI_THREAD_CONTEXT)),
+                bullet("云端阅读版", repo_blob_url(repo_base_url, branch, f"cloud/views/learnings/{stem}.md")),
+                bullet("云端方法卡片", repo_blob_url(repo_base_url, branch, "cloud/thread_sync/cat_meme_method_cards.md")),
+                "",
+            ]
+        )
+
+    return "\n".join(lines).strip() + "\n"
+
+
 def sync_bucket(
     *,
     source_dir: Path,
@@ -556,6 +678,8 @@ def sync_bucket(
 def main() -> None:
     args = parse_args()
     pull_result = maybe_pull_repo() if args.pull else None
+    repo_base_url = infer_repo_base_url()
+    branch = infer_repo_branch()
     sync_state = state()
     bilibili_sync_results: list[dict[str, Any]] = []
 
@@ -596,6 +720,8 @@ def main() -> None:
     payload = {
         "time": now_iso(),
         "trigger_label": args.trigger_label,
+        "repo_base_url": repo_base_url,
+        "branch": branch,
         "pull_result": pull_result,
         "imported_ideas": imported_ideas,
         "imported_learnings": imported_learnings,
@@ -603,6 +729,18 @@ def main() -> None:
         "minder_learning_logs": minder_learning_logs,
         "bilibili_sync_results": bilibili_sync_results,
     }
+    SYNC_STATUS_DIR.mkdir(parents=True, exist_ok=True)
+    write_json(SYNC_STATUS_JSON, payload)
+    SYNC_STATUS_MD.write_text(
+        render_sync_status_markdown(
+            payload=payload,
+            idea_entries=idea_entries,
+            learning_entries=learning_entries,
+            repo_base_url=repo_base_url,
+            branch=branch,
+        ),
+        encoding="utf-8",
+    )
     append_jsonl(RUN_LOG, payload)
     print(json.dumps(payload, ensure_ascii=False, indent=2))
 
