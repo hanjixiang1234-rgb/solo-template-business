@@ -22,8 +22,31 @@
         </p>
         <div class="status-card">
           <p class="status-title">当前同步方向</p>
-          <p class="status-value">Phone → Cloud → minder → bilibili-cat-meme</p>
+          <p class="status-value">Phone → OpenAI Cloud Hub → minder → bilibili-cat-meme</p>
         </div>
+      </section>
+
+      <section class="card notes">
+        <h2>云端设置</h2>
+        <p class="muted">
+          这里优先直连你自己的轻量云后端，不再默认走 GitHub。云端地址和写入口令只会保存在你手机浏览器本地。
+        </p>
+        <label>
+          <span>云端接口地址</span>
+          <input
+            id="cloud-api-base"
+            placeholder="例如：https://your-openai-cloud-hub.example.com"
+            autocomplete="off"
+          />
+        </label>
+        <label>
+          <span>写入口令</span>
+          <input id="cloud-write-token" type="password" placeholder="输入你自己的提交口令" autocomplete="off" />
+        </label>
+        <div class="actions">
+          <button class="secondary" id="save-cloud-settings" type="button">保存云端设置</button>
+        </div>
+        <p class="muted" id="cloud-settings-status">如果这两项没填，页面会自动回退到 GitHub 提交。</p>
       </section>
 
       <section class="switcher">
@@ -82,7 +105,7 @@
           </label>
 
           <div class="actions">
-            <button class="primary" type="submit">打开云端提交页</button>
+            <button class="primary" type="submit">提交到云端</button>
             <button class="secondary" type="button" data-copy="idea">复制内容</button>
           </div>
         </form>
@@ -152,7 +175,7 @@
           </label>
 
           <div class="actions">
-            <button class="primary" type="submit">打开云端提交页</button>
+            <button class="primary" type="submit">提交到云端</button>
             <button class="secondary" type="button" data-copy="learning">复制内容</button>
           </div>
         </form>
@@ -161,14 +184,14 @@
       <section class="card notes">
         <h2>提交流程</h2>
         <ol>
-          <li>在这里填完内容，点“打开云端提交页”。</li>
-          <li>页面会跳到 GitHub 的预填提交页，你只需要点一次 `Submit new issue`。</li>
-          <li>云端开始处理，电脑一上线就会自动同步到本地。</li>
+          <li>优先模式：填好后直接提交到你自己的云后端。</li>
+          <li>云端会用 OpenAI 处理内容，再把结构化结果留在云端队列里。</li>
+          <li>电脑一上线，本地同步脚本会把结果拉回 minder 和 bilibili-cat-meme。</li>
         </ol>
         <p class="muted">
-          这版入口已经把交互收拢到一个手机页面里了，但最后一步仍然会用 GitHub 帐号提交，
-          因为云端中枢当前就跑在 GitHub 上。
+          如果你暂时还没把新云后端部署好，页面会回退到 GitHub 预填提交页，不会直接失效。
         </p>
+        <p class="muted" id="submission-status"></p>
       </section>
     </main>
 

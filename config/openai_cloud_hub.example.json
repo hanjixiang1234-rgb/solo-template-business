@@ -1,0 +1,4 @@
+{
+  "api_base_url": "https://your-openai-cloud-hub.example.com",
+  "read_token": "replace-with-read-token"
+}

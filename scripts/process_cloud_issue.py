@@ -465,7 +465,7 @@ def build_learning_payload(meta: dict[str, Any], sections: dict[str, str]) -> di
         payload["extraction_error"] = str(exc)
 
     summary, summary_error = summarize_with_openai(payload)
-    fallback_summary = heuristic_analysis(payload) if payload["extraction_status"] == "completed" else None
+    fallback_summary = heuristic_analysis(payload)
     payload["analysis"] = summary or fallback_summary
     if summary:
         payload["analysis_status"] = "ai_completed"

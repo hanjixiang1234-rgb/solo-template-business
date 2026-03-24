@@ -8,6 +8,9 @@ import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any
+from urllib.error import HTTPError, URLError
+from urllib.parse import urlencode
+from urllib.request import Request, urlopen
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -34,12 +37,14 @@ LEARNING_MEMORY_LEDGER = PROJECT_ROOT / "data" / "cloud_learning_memory.jsonl"
 SYNC_STATUS_DIR = MINDER_ROOT / "sync_status"
 SYNC_STATUS_JSON = SYNC_STATUS_DIR / "latest.json"
 SYNC_STATUS_MD = SYNC_STATUS_DIR / "latest.md"
+OPENAI_CLOUD_CONFIG = PROJECT_ROOT / "config" / "openai_cloud_hub.local.json"
 
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser()
     parser.add_argument("--pull", action="store_true")
     parser.add_argument("--trigger-label", default="manual")
+    parser.add_argument("--config-path", default=str(OPENAI_CLOUD_CONFIG))
     return parser.parse_args()
 
 
@@ -191,12 +196,88 @@ def normalize_state_bucket(value: Any) -> dict[str, str]:
     return {}
 
 
-def state() -> dict[str, dict[str, str]]:
+def normalize_cursor(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except (TypeError, ValueError):
+        return 0
+
+
+def state() -> dict[str, Any]:
     raw = read_json(STATE_FILE, {"ideas": {}, "learnings": {}})
     return {
         "ideas": normalize_state_bucket(raw.get("ideas", {})),
         "learnings": normalize_state_bucket(raw.get("learnings", {})),
+        "remote_cursor": normalize_cursor(raw.get("remote_cursor", 0)),
     }
+
+
+def load_openai_cloud_config(path: Path) -> dict[str, str] | None:
+    if not path.exists():
+        return None
+    raw = read_json(path, {})
+    api_base_url = str(raw.get("api_base_url", "")).strip().rstrip("/")
+    read_token = str(raw.get("read_token", "")).strip()
+    if not api_base_url or not read_token:
+        return None
+    return {
+        "api_base_url": api_base_url,
+        "read_token": read_token,
+    }
+
+
+def fetch_openai_cloud_feed(config: dict[str, str], after_id: int) -> dict[str, Any]:
+    query = urlencode({"after_id": str(after_id), "limit": "100"})
+    url = f"{config['api_base_url']}/api/v1/feed?{query}"
+    request = Request(
+        url,
+        headers={
+            "Authorization": f"Bearer {config['read_token']}",
+            "User-Agent": "minder-local-sync/1.0",
+        },
+    )
+    try:
+        with urlopen(request, timeout=30) as response:
+            return json.loads(response.read().decode("utf-8"))
+    except (HTTPError, URLError) as exc:
+        raise RuntimeError(str(exc)) from exc
+
+
+def refresh_local_cloud_views() -> dict[str, Any]:
+    result = subprocess.run(
+        [
+            "/usr/bin/python3",
+            str(PROJECT_ROOT / "scripts" / "build_cloud_hub_views.py"),
+            "--repo-root",
+            str(PROJECT_ROOT),
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    return {
+        "status": "completed" if result.returncode == 0 else "failed",
+        "returncode": result.returncode,
+        "stdout": result.stdout.strip(),
+        "stderr": result.stderr.strip(),
+    }
+
+
+def write_remote_api_item(item: dict[str, Any]) -> str:
+    payload = item.get("payload") or {}
+    stem = str(item.get("filename_stem") or payload.get("filename_stem") or "")
+    kind = str(item.get("kind") or payload.get("kind") or "")
+    if not stem:
+        submitted_at = str(payload.get("submitted_at", now_iso()))
+        title = first_nonempty(payload.get("title", ""), f"{kind}-{item.get('id', 'item')}")
+        stem = f"{submitted_at[:10]}-submission-{item.get('id', 'item')}-{slugify(title)}"
+
+    if kind == "idea":
+        destination = IDEAS_DIR / f"{stem}.json"
+    else:
+        destination = LEARNINGS_DIR / f"{stem}.json"
+    write_json(destination, payload)
+    return str(destination)
 
 
 def first_nonempty(*values: Any) -> str:
@@ -204,6 +285,11 @@ def first_nonempty(*values: Any) -> str:
         if isinstance(value, str) and value.strip():
             return value.strip()
     return ""
+
+
+def slugify(value: str) -> str:
+    normalized = re.sub(r"[^a-zA-Z0-9\u4e00-\u9fff]+", "-", value.strip()).strip("-").lower()
+    return normalized or "item"
 
 
 def render_idea_markdown(payload: dict[str, Any]) -> str:
@@ -582,6 +668,8 @@ def render_sync_status_markdown(
     latest_idea = latest_entry(idea_entries)
     latest_learning = latest_entry(learning_entries)
     pull_result = payload.get("pull_result") or {}
+    local_cloud_views_root = PROJECT_ROOT / "cloud" / "views"
+    local_thread_sync_root = PROJECT_ROOT / "cloud" / "thread_sync"
 
     def bullet(label: str, value: str) -> str:
         return f"- {label}: {value}" if value else f"- {label}: (空)"
@@ -597,15 +685,20 @@ def render_sync_status_markdown(
         bullet("触发方式", payload.get("trigger_label", "")),
         bullet("拉取状态", pull_result.get("status", "skipped") if isinstance(pull_result, dict) else "skipped"),
         bullet("git pull 输出", (pull_result.get("stdout", "") or pull_result.get("stderr", "")).strip() if isinstance(pull_result, dict) else ""),
+        bullet("API 拉取模式", "已启用" if payload.get("api_fetch_result") else "未启用"),
+        bullet("API 来源", payload.get("api_fetch_result", {}).get("api_base_url", "") if isinstance(payload.get("api_fetch_result"), dict) else ""),
+        bullet("API 新拉取条数", str(len(payload.get("api_fetch_result", {}).get("written_files", []))) if isinstance(payload.get("api_fetch_result"), dict) else "0"),
+        bullet("本地云端视图刷新", payload.get("local_cloud_view_refresh", {}).get("status", "") if isinstance(payload.get("local_cloud_view_refresh"), dict) else ""),
         bullet("新导入灵感数", str(len(payload.get("imported_ideas", [])))),
         bullet("新导入学习数", str(len(payload.get("imported_learnings", [])))),
         "",
         "## 手机端永久入口",
         "",
-        f"- 模板选择页: {repo_base_url}/issues/new/choose" if repo_base_url else "- 模板选择页: 请直接打开 GitHub 仓库的 Issues。",
-        f"- 灵感收件箱: {repo_base_url}/issues/new?template=idea-inbox.yml" if repo_base_url else "- 灵感收件箱: 请从模板选择页进入。",
-        f"- 内容解析请求: {repo_base_url}/issues/new?template=learning-request.yml" if repo_base_url else "- 内容解析请求: 请从模板选择页进入。",
-        bullet("云端控制台", repo_blob_url(repo_base_url, branch, "CLOUD_HUB.md")),
+        bullet("OpenAI Cloud Hub API", payload.get("api_fetch_result", {}).get("api_base_url", "") if isinstance(payload.get("api_fetch_result"), dict) else ""),
+        f"- GitHub 模板选择页（回退入口）: {repo_base_url}/issues/new/choose" if repo_base_url else "- GitHub 模板选择页（回退入口）: (空)",
+        f"- GitHub 灵感收件箱（回退入口）: {repo_base_url}/issues/new?template=idea-inbox.yml" if repo_base_url else "- GitHub 灵感收件箱（回退入口）: (空)",
+        f"- GitHub 内容解析请求（回退入口）: {repo_base_url}/issues/new?template=learning-request.yml" if repo_base_url else "- GitHub 内容解析请求（回退入口）: (空)",
+        bullet("本地云端控制台", str(PROJECT_ROOT / "CLOUD_HUB.md")),
         "",
     ]
 
@@ -618,7 +711,7 @@ def render_sync_status_markdown(
                 bullet("标题", idea_payload.get("title", stem)),
                 bullet("本地灵感文件", str(LOCAL_IDEAS_DIR / f"{stem}.md")),
                 bullet("每日日志", str(MINDER_DAILY_IDEAS_DIR / f"{submitted_date(idea_payload)}.md")),
-                bullet("云端阅读版", repo_blob_url(repo_base_url, branch, f"cloud/views/ideas/{stem}.md")),
+                bullet("本地云端阅读版", str(local_cloud_views_root / "ideas" / f"{stem}.md")),
                 "",
             ]
         )
@@ -633,8 +726,8 @@ def render_sync_status_markdown(
                 bullet("minder 每日日志", str(MINDER_DAILY_LEARNINGS_DIR / f"{submitted_date(learning_payload)}.md")),
                 bullet("猫 meme 镜像", str(BILIBILI_LEARNINGS_DIR / f"{stem}.md")),
                 bullet("猫 meme 线程上下文", str(BILIBILI_THREAD_CONTEXT)),
-                bullet("云端阅读版", repo_blob_url(repo_base_url, branch, f"cloud/views/learnings/{stem}.md")),
-                bullet("云端方法卡片", repo_blob_url(repo_base_url, branch, "cloud/thread_sync/cat_meme_method_cards.md")),
+                bullet("本地云端阅读版", str(local_cloud_views_root / "learnings" / f"{stem}.md")),
+                bullet("本地云端方法卡片", str(local_thread_sync_root / "cat_meme_method_cards.md")),
                 "",
             ]
         )
@@ -677,11 +770,41 @@ def sync_bucket(
 
 def main() -> None:
     args = parse_args()
-    pull_result = maybe_pull_repo() if args.pull else None
+    api_config = load_openai_cloud_config(Path(args.config_path).expanduser())
+    pull_result: dict[str, Any] | None
+    if api_config:
+        pull_result = {"status": "skipped", "reason": "api_mode_enabled"}
+    else:
+        pull_result = maybe_pull_repo() if args.pull else None
     repo_base_url = infer_repo_base_url()
     branch = infer_repo_branch()
     sync_state = state()
     bilibili_sync_results: list[dict[str, Any]] = []
+    api_fetch_result: dict[str, Any] | None = None
+    local_cloud_view_refresh: dict[str, Any] | None = None
+
+    if api_config:
+        after_id = normalize_cursor(sync_state.get("remote_cursor", 0))
+        try:
+            feed = fetch_openai_cloud_feed(api_config, after_id)
+            written_files = [write_remote_api_item(item) for item in feed.get("items", [])]
+            sync_state["remote_cursor"] = normalize_cursor(feed.get("next_cursor", after_id))
+            local_cloud_view_refresh = refresh_local_cloud_views()
+            api_fetch_result = {
+                "status": "completed",
+                "api_base_url": api_config["api_base_url"],
+                "written_files": written_files,
+                "next_cursor": sync_state["remote_cursor"],
+                "view_refresh": local_cloud_view_refresh,
+            }
+        except Exception as exc:
+            api_fetch_result = {
+                "status": "failed",
+                "api_base_url": api_config["api_base_url"],
+                "error": str(exc),
+                "written_files": [],
+                "next_cursor": normalize_cursor(sync_state.get("remote_cursor", 0)),
+            }
 
     def after_learning_import(stem: str, payload: dict[str, Any]) -> None:
         bilibili_sync_results.append(sync_learning_into_bilibili(stem, payload))
@@ -723,6 +846,8 @@ def main() -> None:
         "repo_base_url": repo_base_url,
         "branch": branch,
         "pull_result": pull_result,
+        "api_fetch_result": api_fetch_result,
+        "local_cloud_view_refresh": local_cloud_view_refresh,
         "imported_ideas": imported_ideas,
         "imported_learnings": imported_learnings,
         "minder_idea_logs": minder_idea_logs,

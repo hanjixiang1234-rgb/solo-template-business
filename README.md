@@ -46,3 +46,14 @@ Operating boundary:
 - Phone submits intent.
 - GitHub Actions processes and writes cloud-readable outputs back into the repo.
 - The local Mac mirrors those outputs into `minder/` and `bilibili-cat-meme/` when it comes online.
+
+## OpenAI Cloud Hub
+
+There is also a GitHub-free daily-use path now:
+
+- mobile portal can submit directly to a lightweight cloud backend
+- the backend stores a durable queue and calls OpenAI for analysis
+- the local Mac pulls the processed feed back into `minder/` and `bilibili-cat-meme/`
+
+Setup guide:
+- [OPENAI_CLOUD_HUB_SETUP.md](/Users/Zhuanz1/Documents/solo-template-business/OPENAI_CLOUD_HUB_SETUP.md)

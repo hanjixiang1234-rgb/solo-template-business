@@ -1,6 +1,7 @@
 .DS_Store
 .browser/
 xhs_session.json
+config/openai_cloud_hub.local.json
 
 data/automation_logs/
 data/cloud_idea_memory.jsonl
@@ -8,6 +9,7 @@ data/cloud_learning_memory.jsonl
 data/cloud_sync_runs.jsonl
 data/cloud_sync_state.json
 data/terminal_auto_test.log
+data/openai_cloud_hub.sqlite3
 
 research/mobile_inbox/ideas/*
 !research/mobile_inbox/ideas/.gitkeep
