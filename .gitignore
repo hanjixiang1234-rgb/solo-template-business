@@ -2,6 +2,7 @@
 .browser/
 xhs_session.json
 config/openai_cloud_hub.local.json
+.env.openai-cloud-hub.local
 
 data/automation_logs/
 data/cloud_idea_memory.jsonl

@@ -14,12 +14,22 @@
 
 - 云后端服务：
   `/Users/Zhuanz1/Documents/solo-template-business/scripts/openai_cloud_hub_server.py`
+- 云后端启动脚本：
+  `/Users/Zhuanz1/Documents/solo-template-business/scripts/run_openai_cloud_hub.sh`
 - 本地同步脚本：
   `/Users/Zhuanz1/Documents/solo-template-business/scripts/sync_cloud_hub_to_local.py`
 - 手机入口：
   `/Users/Zhuanz1/Documents/solo-template-business/mobile_portal/index.html`
 - 本地配置模板：
   `/Users/Zhuanz1/Documents/solo-template-business/config/openai_cloud_hub.example.json`
+- 云端依赖清单：
+  `/Users/Zhuanz1/Documents/solo-template-business/requirements-openai-cloud-hub.txt`
+- 云端环境变量模板：
+  `/Users/Zhuanz1/Documents/solo-template-business/.env.openai-cloud-hub.example`
+- Docker 部署入口：
+  `/Users/Zhuanz1/Documents/solo-template-business/Dockerfile.openai-cloud-hub`
+- Linux systemd 模板：
+  `/Users/Zhuanz1/Documents/solo-template-business/ops/openai_cloud_hub.service`
 
 ## 云后端做什么
 
@@ -63,10 +73,10 @@
 
 ```bash
 cd /Users/Zhuanz1/Documents/solo-template-business
-export OPENAI_API_KEY=your_key
-export MINDER_CLOUD_WRITE_TOKEN=your_write_token
-export MINDER_CLOUD_READ_TOKEN=your_read_token
-python3 scripts/openai_cloud_hub_server.py --host 0.0.0.0 --port 8787
+python3 -m pip install -r requirements-openai-cloud-hub.txt
+cp .env.openai-cloud-hub.example .env.openai-cloud-hub.local
+# 把里面的 key 和 token 改成你自己的
+./scripts/run_openai_cloud_hub.sh
 ```
 
 ## 手机入口怎么配
@@ -131,6 +141,27 @@ python3 /Users/Zhuanz1/Documents/solo-template-business/scripts/sync_cloud_hub_t
 1. 从你的 OpenAI Cloud Hub 拉取新结果
 2. 落到本地 `minder`
 3. 更新猫 meme 的线程上下文和方法卡片
+
+## Docker 方式
+
+```bash
+docker build -f Dockerfile.openai-cloud-hub -t openai-cloud-hub .
+docker run -d \
+  --name openai-cloud-hub \
+  --env-file .env.openai-cloud-hub.local \
+  -p 8787:8787 \
+  openai-cloud-hub
+```
+
+## Linux systemd 方式
+
+如果你是自己买的 Linux 云主机，可以用：
+
+```bash
+sudo cp ops/openai_cloud_hub.service /etc/systemd/system/openai_cloud_hub.service
+sudo systemctl daemon-reload
+sudo systemctl enable --now openai_cloud_hub
+```
 
 ## 当前边界
 

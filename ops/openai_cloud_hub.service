@@ -1,0 +1,14 @@
+[Unit]
+Description=OpenAI Cloud Hub
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/solo-template-business
+EnvironmentFile=/opt/solo-template-business/.env.openai-cloud-hub.local
+ExecStart=/opt/solo-template-business/scripts/run_openai_cloud_hub.sh
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
